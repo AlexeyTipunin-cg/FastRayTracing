@@ -1,5 +1,9 @@
 #include "Renderer.h"
 #include <execution>
+#include <vulkan/vulkan.hpp>
+#include <iostream>
+#include <fstream>
+#include "Compute.h"
 
 namespace Utils {
 	static uint32_t ConvertToRGBA(glm::vec4 color) {
@@ -28,11 +32,37 @@ namespace Utils {
 	{
 		return glm::normalize(glm::vec3(RandomFloat(seed) * 2.0f - 1.0f, RandomFloat(seed) * 2.0f - 1.0f, RandomFloat(seed) * 2.0f - 1.0f));
 	}
+
+	static std::vector<char> readFile(const std::string& filename) {
+		std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+		if (!file.is_open()) {
+			throw std::runtime_error("failed to open file!");
+		}
+
+		size_t fileSize = (size_t)file.tellg();
+		std::vector<char> buffer(fileSize);
+
+		file.seekg(0);
+		file.read(buffer.data(), fileSize);
+
+		file.close();
+
+		return buffer;
+	}
 }
 
 
-
 void Renderer::Render(const Scene& scene, const Camera& camera) {
+
+	if (m_Compute == nullptr)
+	{
+		m_Compute = new Compute(scene);
+	}
+
+
+	//return;
+
 	m_Camera = &camera;
 	m_Scene = &scene;
 

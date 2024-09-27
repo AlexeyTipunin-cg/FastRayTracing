@@ -6,6 +6,7 @@
 #include "Camera.h"
 #include "Ray.h"
 #include "Scene.h"
+#include "Compute.h"
 
 
 class Renderer
@@ -42,6 +43,8 @@ private:
 private:
 	const Scene* m_Scene;
 	const Camera* m_Camera;
+
+	const Compute* m_Compute = nullptr;
 
 	std::vector<uint32_t> m_HorizontalIterator, m_VerticalIterator;
 
