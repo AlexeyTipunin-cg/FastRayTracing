@@ -25,6 +25,13 @@ struct Sphere
 	int MaterialIndex = 0;
 };
 
+struct SphereComputeData
+{
+	alignas(16) glm::vec4 Position{ 0.0f };
+	float Radius = 0.5f;
+	int MaterialIndex = 0;
+};
+
 struct Scene
 {
 	std::vector<Sphere> Spheres;

@@ -1,12 +1,12 @@
 
-struct Sphere
+struct SphereData
 {
-	float3 Position;
+	float4 Position;
 	float Radius;
 	int MaterialIndex;
 };
 
-[[vk::binding(0, 0)]] RWStructuredBuffer<Sphere> InBuffer;
+[[vk::binding(0, 0)]] RWStructuredBuffer<SphereData> InBuffer;
 [[vk::binding(1, 0)]] RWStructuredBuffer<float> OutBuffer;
 
 
@@ -81,79 +81,79 @@ void Main(uint3 DTid : SV_DispatchThreadID)
 // 	return float4(light, 1.0f);
 // }
 
-HitPayload ClosestHit(inout Ray ray, float hitDistance, int objectIndex)
-{
-	HitPayload payload;
-	payload.HitDistance = hitDistance;
-	payload.ObjectIndex = objectIndex;
+// HitPayload ClosestHit(inout Ray ray, float hitDistance, int objectIndex)
+// {
+// 	HitPayload payload;
+// 	payload.HitDistance = hitDistance;
+// 	payload.ObjectIndex = objectIndex;
 
-	Sphere closestSphere = InBuffer[objectIndex];
+// 	Sphere closestSphere = InBuffer[objectIndex];
 
-	float3 origin = ray.Origin - closestSphere.Position;
-	payload.WorldPosition = origin + ray.Direction * hitDistance;
-	payload.WorldNormal = normalize(payload.WorldPosition);
+// 	float3 origin = ray.Origin - closestSphere.Position;
+// 	payload.WorldPosition = origin + ray.Direction * hitDistance;
+// 	payload.WorldNormal = normalize(payload.WorldPosition);
 
-	payload.WorldPosition += closestSphere.Position;
+// 	payload.WorldPosition += closestSphere.Position;
 
-	return  payload;
-}
+// 	return  payload;
+// }
 
-HitPayload Miss(inout Ray ray)
-{
-	HitPayload payload;
-	payload.HitDistance = -1.0f;
-	return payload;
-}
+// HitPayload Miss(inout Ray ray)
+// {
+// 	HitPayload payload;
+// 	payload.HitDistance = -1.0f;
+// 	return payload;
+// }
 
-HitPayload TraceRay(inout Ray ray)
-{
-	float3 rayOrigin = ray.Origin;
+// HitPayload TraceRay(inout Ray ray)
+// {
+// 	float3 rayOrigin = ray.Origin;
 
-	int closestSphere = -1;
-	float hitDistance = 1.0 / 0.0;
+// 	int closestSphere = -1;
+// 	float hitDistance = 1.0 / 0.0;
 
-	float3 rayDirection = ray.Direction;
-	float a = dot(rayDirection, rayDirection);
+// 	float3 rayDirection = ray.Direction;
+// 	float a = dot(rayDirection, rayDirection);
 
-    uint numStructs, stride;
-    InBuffer.GetDimensions(numStructs, stride);
+//     uint numStructs, stride;
+//     InBuffer.GetDimensions(numStructs, stride);
 
-	for (int i = 0 ; i < numStructs; i++)
-	{
-		Sphere sphere = InBuffer[i];
-		float3 origin = rayOrigin - sphere.Position;
+// 	for (int i = 0 ; i < numStructs; i++)
+// 	{
+// 		Sphere sphere = InBuffer[i];
+// 		float3 origin = rayOrigin - sphere.Position;
 
-		float b = 2.0f * dot(origin, rayDirection);
-		float c = dot(origin, origin) - sphere.Radius * sphere.Radius;
+// 		float b = 2.0f * dot(origin, rayDirection);
+// 		float c = dot(origin, origin) - sphere.Radius * sphere.Radius;
 
-		float discrim = b * b - 4.0f * a * c;
+// 		float discrim = b * b - 4.0f * a * c;
 
-		if (discrim < 0.0f)
-		{
-			continue;
-		}
+// 		if (discrim < 0.0f)
+// 		{
+// 			continue;
+// 		}
 
-		float discrimRoot = sqrt(discrim);
-		float t2 = (-b - discrimRoot) / 2 / a;
+// 		float discrimRoot = sqrt(discrim);
+// 		float t2 = (-b - discrimRoot) / 2 / a;
 
-		if (t2 < 0)
-		{
-			continue;
-		}
+// 		if (t2 < 0)
+// 		{
+// 			continue;
+// 		}
 
-		float3 p2 = origin + rayDirection * t2;
+// 		float3 p2 = origin + rayDirection * t2;
 
-		if (t2 < hitDistance)
-		{
-			hitDistance = t2;
-			closestSphere = i;
-		}
-	}
+// 		if (t2 < hitDistance)
+// 		{
+// 			hitDistance = t2;
+// 			closestSphere = i;
+// 		}
+// 	}
 
-	if (closestSphere == -1)
-	{
-		return Miss(ray);
-	}
+// 	if (closestSphere == -1)
+// 	{
+// 		return Miss(ray);
+// 	}
 
-	return ClosestHit(ray, hitDistance, closestSphere);
-}
+// 	return ClosestHit(ray, hitDistance, closestSphere);
+// }

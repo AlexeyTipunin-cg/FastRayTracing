@@ -47,7 +47,7 @@ void Compute::Init(Scene scene)
 
 
     const uint32_t NumElements = scene.Spheres.size();
-    const uint32_t BufferSizeIn = NumElements * sizeof(Sphere);
+    const uint32_t BufferSizeIn = NumElements * sizeof(SphereComputeData);
     const uint32_t BufferSizeOut = NumElements * sizeof(float);
 
 
@@ -102,10 +102,11 @@ void Compute::Init(Scene scene)
     vk::DeviceMemory InBufferMemory = device.allocateMemory(InBufferMemoryAllocateInfo);
     vk::DeviceMemory OutBufferMemory = device.allocateMemory(OutBufferMemoryAllocateInfo);
 
-    Sphere* InBufferPtr = static_cast<Sphere*>(device.mapMemory(InBufferMemory, 0, BufferSizeIn));
+    SphereComputeData* InBufferPtr = static_cast<SphereComputeData*>(device.mapMemory(InBufferMemory, 0, BufferSizeIn));
     for (int32_t I = 0; I < NumElements; ++I)
     {
-        InBufferPtr[I] = scene.Spheres[I];
+        SphereComputeData data{ glm::vec4(scene.Spheres[I].Position, 0.0f),scene.Spheres[I].Radius, scene.Spheres[I].MaterialIndex };
+        InBufferPtr[I] = data;
     }
     device.unmapMemory(InBufferMemory);
 
@@ -159,7 +160,7 @@ void Compute::Init(Scene scene)
     vk::DescriptorSetAllocateInfo DescriptorSetAllocInfo(DescriptorPool, 1, &DescriptorSetLayout);
     const std::vector<vk::DescriptorSet> DescriptorSets = device.allocateDescriptorSets(DescriptorSetAllocInfo);
     vk::DescriptorSet DescriptorSet = DescriptorSets.front();
-    vk::DescriptorBufferInfo InBufferInfo(InBuffer, 0, NumElements * sizeof(Sphere));
+    vk::DescriptorBufferInfo InBufferInfo(InBuffer, 0, NumElements * sizeof(SphereComputeData));
     vk::DescriptorBufferInfo OutBufferInfo(OutBuffer, 0, NumElements * sizeof(float));
 
     const std::vector<vk::WriteDescriptorSet> WriteDescriptorSets = {
@@ -203,7 +204,7 @@ void Compute::Init(Scene scene)
         true,               // Wait All
         uint64_t(-1));      // Timeout
 
-    InBufferPtr = static_cast<Sphere*>(device.mapMemory(InBufferMemory, 0, BufferSizeIn));
+    InBufferPtr = static_cast<SphereComputeData*>(device.mapMemory(InBufferMemory, 0, BufferSizeIn));
     for (uint32_t I = 0; I < NumElements; ++I)
     {
         std::cout << InBufferPtr[I].Radius << " ";

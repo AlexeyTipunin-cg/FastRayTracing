@@ -1,5 +1,0 @@
-C:\VulkanSDK\1.3.290.0\Bin\glslc.exe compute.vert -o compute.spv
-C:\VulkanSDK\1.3.290.0\Bin\dxc.exe -T cs_6_0 -E Main -spirv compute.vert
-C:\VulkanSDK\1.3.290.0\Bin\dxc.exe -T cs_6_0 -E Main -spirv compute.vert -Fo  ./compute.vert.spv
-
-C:\VulkanSDK\1.3.290.0\Bin\dxc.exe -T cs_6_0 -E Main -spirv raytracer.hlsl -Fo  ./raytracer.vert.spv
