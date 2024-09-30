@@ -59,9 +59,12 @@ void Compute::InitBegiin()
 
 	CameraDirectionsBufferSize = m_Camera->GetRayDirections().size() * sizeof(CameraDirections);
 
+
+
 	NumElements = m_width * m_height;
 	BufferSizeIn = 1 * sizeof(FrameData);
-	BufferSizeOut = NumElements * sizeof(OutPut);
+	BufferSizeOut = NumElements * sizeof(uint32_t);
+	AccumulatedColorBufferSize = NumElements * sizeof(OutPut);
 
 	BufferCreateInfoIn = {
 	vk::BufferCreateFlags(),                    // Flags
@@ -90,10 +93,22 @@ void Compute::InitBegiin()
 	&ComputeQueueFamilyIndex
 	};
 
+	AccumulatedCreateInfo = {
+		vk::BufferCreateFlags(),
+		AccumulatedColorBufferSize,
+		vk::BufferUsageFlagBits::eStorageBuffer,
+		vk::SharingMode::eExclusive,
+		1,
+		&ComputeQueueFamilyIndex
+			};
+
+
+
 	InBuffer = device.createBuffer(BufferCreateInfoIn);
 	OutBuffer = device.createBuffer(BufferCreateInfoOut);
 	//vk::Buffer UniformBuffer = device.createBuffer(BufferCreateInfoUniform);
 	CameraBuffer = device.createBuffer(BufferCreateInfoCameraDirections);
+	AccumulatedBuffer = device.createBuffer(AccumulatedCreateInfo);
 	//vk::Buffer MaterialBuffer = device.createBuffer(BufferCreateInfoMaterials);
 
 
@@ -101,10 +116,12 @@ void Compute::InitBegiin()
 	vk::MemoryRequirements OutBufferMemoryRequirements = device.getBufferMemoryRequirements(OutBuffer);
 	//vk::MemoryRequirements UniformBufferMemoryRequirements = device.getBufferMemoryRequirements(UniformBuffer);
 	vk::MemoryRequirements CameraBufferMemoryRequirements = device.getBufferMemoryRequirements(CameraBuffer);
+	vk::MemoryRequirements AccumulatedBufferMemoryRequirements = device.getBufferMemoryRequirements(AccumulatedBuffer);
 	//vk::MemoryRequirements MaterialBufferMemoryRequirements = device.getBufferMemoryRequirements(MaterialBuffer);
 
 
 	vk::PhysicalDeviceMemoryProperties MemoryProperties = physicalDevice.getMemoryProperties();
+	vk::PhysicalDeviceProperties Properties = physicalDevice.getProperties();
 
 	uint32_t MemoryTypeIndex = uint32_t(~0);
 	vk::DeviceSize MemoryHeapSize = uint32_t(~0);
@@ -122,11 +139,14 @@ void Compute::InitBegiin()
 
 	std::cout << "Memory Type Index: " << MemoryTypeIndex << std::endl;
 	std::cout << "Memory Heap Size : " << MemoryHeapSize / 1024 / 1024 / 1024 << " GB" << std::endl;
+	std::cout << "Name : " << Properties.deviceName << std::endl;
+
 
 	vk::MemoryAllocateInfo InBufferMemoryAllocateInfo(InBufferMemoryRequirements.size, MemoryTypeIndex);
 	vk::MemoryAllocateInfo OutBufferMemoryAllocateInfo(OutBufferMemoryRequirements.size, MemoryTypeIndex);
 	//vk::MemoryAllocateInfo UniformBufferAllocateInfo(UniformBufferMemoryRequirements.size, MemoryTypeIndex);
 	vk::MemoryAllocateInfo CameraBufferAllocateInfo(CameraBufferMemoryRequirements.size, MemoryTypeIndex);
+	vk::MemoryAllocateInfo AccumulatedBufferAllocateInfo(AccumulatedBufferMemoryRequirements.size, MemoryTypeIndex);
 	//vk::MemoryAllocateInfo MaterialBufferAllocateInfo(MaterialBufferMemoryRequirements.size, MemoryTypeIndex);
 
 
@@ -134,6 +154,7 @@ void Compute::InitBegiin()
 	OutBufferMemory = device.allocateMemory(OutBufferMemoryAllocateInfo);
 	//vk::DeviceMemory UniformBufferMemory = device.allocateMemory(UniformBufferAllocateInfo);
 	CameraBufferMemory = device.allocateMemory(CameraBufferAllocateInfo);
+	AccumulatedBufferMemory = device.allocateMemory(AccumulatedBufferAllocateInfo);
 
 	std::vector<char> ShaderContents;
 	if (std::ifstream ShaderFile{ "C:/Raytracing/FastRayTracing/RayTracing/src/raytracer.vert.spv", std::ios::binary | std::ios::ate })
@@ -154,7 +175,7 @@ void Compute::InitBegiin()
 {0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute},
 {1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute},
 {2, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute},
-//{3, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute},
+{3, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute},
 //{4, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute}
 	};
 
@@ -179,7 +200,7 @@ void Compute::InitBegiin()
 	ComputePipeline = device.createComputePipeline(PipelineCache, ComputePipelineCreateInfo).value;
 }
 
-void Compute::Init(Scene scene, uint32_t frameIndex)
+void Compute::Init(Scene scene, uint32_t frameIndex, glm::vec4* accumulateData)
 {
 
 	//const uint32_t FrameDataSize = sizeof(FrameData);
@@ -240,10 +261,13 @@ void Compute::Init(Scene scene, uint32_t frameIndex)
 	//device.unmapMemory(UniformBufferMemory);
 
 	CameraBufferPtr = static_cast<CameraDirections*>(device.mapMemory(CameraBufferMemory, 0, CameraDirectionsBufferSize));
+	AccumulationData = static_cast<OutPut*>(device.mapMemory(AccumulatedBufferMemory, 0, AccumulatedColorBufferSize));
 	for (int32_t I = 0; I < m_Camera->GetRayDirections().size(); ++I)
 	{
 		CameraDirections dir{ m_Camera->GetRayDirections()[I] };
 		CameraBufferPtr[I] = dir;
+
+		AccumulationData[I] = OutPut{ accumulateData[I] };
 	}
 
 	device.unmapMemory(CameraBufferMemory);
@@ -262,10 +286,11 @@ void Compute::Init(Scene scene, uint32_t frameIndex)
 	device.bindBufferMemory(OutBuffer, OutBufferMemory, 0);
 	//device.bindBufferMemory(UniformBuffer, UniformBufferMemory, 0);
 	device.bindBufferMemory(CameraBuffer, CameraBufferMemory, 0);
+	device.bindBufferMemory(AccumulatedBuffer, AccumulatedBufferMemory, 0);
 	//device.bindBufferMemory(MaterialBuffer, MaterialBufferMemory, 0);
 
 
-	vk::DescriptorPoolSize DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 3);
+	vk::DescriptorPoolSize DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 4);
 	vk::DescriptorPoolCreateInfo DescriptorPoolCreateInfo(vk::DescriptorPoolCreateFlags(), 1, DescriptorPoolSize);
 	vk::DescriptorPool DescriptorPool = device.createDescriptorPool(DescriptorPoolCreateInfo);
 
@@ -275,9 +300,10 @@ void Compute::Init(Scene scene, uint32_t frameIndex)
 	const std::vector<vk::DescriptorSet> DescriptorSets = device.allocateDescriptorSets(DescriptorSetAllocInfo);
 	DescriptorSet = DescriptorSets.front();
 	vk::DescriptorBufferInfo InBufferInfo(InBuffer, 0, 1 * sizeof(FrameData));
-	vk::DescriptorBufferInfo OutBufferInfo(OutBuffer, 0, NumElements * sizeof(OutPut));
+	vk::DescriptorBufferInfo OutBufferInfo(OutBuffer, 0, BufferSizeOut);
 	//vk::DescriptorBufferInfo UniformBufferInfo(UniformBuffer, 0, FrameDataSize);
 	vk::DescriptorBufferInfo CameraBufferInfo(CameraBuffer, 0, CameraDirectionsBufferSize);
+	vk::DescriptorBufferInfo AccumulatedBufferInfo(AccumulatedBuffer, 0, AccumulatedColorBufferSize);
 	//vk::DescriptorBufferInfo MaterialBufferInfo(MaterialBuffer, 0, MaterialBufferSize);
 
 	WriteDescriptorSet = {
@@ -285,6 +311,7 @@ void Compute::Init(Scene scene, uint32_t frameIndex)
 		{DescriptorSet, 1, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &OutBufferInfo},
 		//{DescriptorSet, 2, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &UniformBufferInfo},
 		{DescriptorSet, 2, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &CameraBufferInfo},
+		{DescriptorSet, 3, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &AccumulatedBufferInfo},
 		//{DescriptorSet, 4, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &MaterialBufferInfo},
 	};
 	device.updateDescriptorSets(WriteDescriptorSet, {});
@@ -340,8 +367,9 @@ void Compute::Init(Scene scene, uint32_t frameIndex)
 	std::cout << std::endl;
 	device.unmapMemory(InBufferMemory);
 
-	OutPut* OutBufferPtr = static_cast<OutPut*>(device.mapMemory(OutBufferMemory, 0, BufferSizeOut));
+	uint32_t* OutBufferPtr = static_cast<uint32_t*>(device.mapMemory(OutBufferMemory, 0, BufferSizeOut));
 	RenderResult = OutBufferPtr;
+	AccumulationData = static_cast<OutPut*>(device.mapMemory(AccumulatedBufferMemory, 0, AccumulatedColorBufferSize));
 	//for (uint32_t I = 0; I < NumElements; ++I)
 	//{
 	//	std::cout << glm::to_string(OutBufferPtr[I].direction) << "\n";
@@ -452,11 +480,11 @@ void Compute::Draw()
 	std::cout << std::endl;
 	device.unmapMemory(InBufferMemory);
 
-	OutPut* OutBufferPtr = static_cast<OutPut*>(device.mapMemory(OutBufferMemory, 0, BufferSizeOut));
+	uint32_t* OutBufferPtr = static_cast<uint32_t*>(device.mapMemory(OutBufferMemory, 0, BufferSizeOut));
 	RenderResult = OutBufferPtr;
 	for (uint32_t I = 0; I < NumElements; ++I)
 	{
-		std::cout << glm::to_string(OutBufferPtr[I].direction) << "\n";
+		std::cout << OutBufferPtr[I] << "\n";
 		break;
 	}
 	std::cout << std::endl;

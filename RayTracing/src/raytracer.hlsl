@@ -30,8 +30,9 @@ struct SceneData
 };
 
 [[vk::binding(0, 0)]] RWStructuredBuffer<SceneData> InBuffer;
-[[vk::binding(1, 0)]] RWStructuredBuffer<float4> OutBuffer;
+[[vk::binding(1, 0)]] RWStructuredBuffer<uint> OutBuffer;
 [[vk::binding(2, 0)]] RWStructuredBuffer<float3> CameraDirections;
+[[vk::binding(3, 0)]] RWStructuredBuffer<float4> AccumulatedColor;
 
 
 struct HitPayload
@@ -187,10 +188,22 @@ float4 PerPixel(uint x, uint y)
 	return float4(light, 1.0f);
 }
 
-[numthreads(1, 1, 1)]
+uint ConvertToRGBA(float4 color) {
+	uint r = uint(255.0f * color.r);
+	uint g = uint(255.0f * color.g);
+	uint b = uint(255.0f * color.b);
+	uint a = uint(255 * color.a);
+	return (a << 24) | (b << 16) | (g << 8) | r;
+}
+
+[numthreads(2, 1, 1)]
 void Main(uint3 DTid : SV_DispatchThreadID)
 {
     // OutBuffer[DTid.x + DTid.y * InBuffer[0].ScreenWidth] = PerPixel(DTid.x, DTid.y);
-	OutBuffer[DTid.x + DTid.y * InBuffer[0].ScreenWidth] = PerPixel(DTid.x, DTid.y);
+	float4 color =  PerPixel(DTid.x, DTid.y);
+	AccumulatedColor[DTid.x + DTid.y * InBuffer[0].ScreenWidth] += color;
+	float4 sampledColor = AccumulatedColor[DTid.x + DTid.y * InBuffer[0].ScreenWidth] / (float)InBuffer[0].FrameIndex;
+	sampledColor = clamp(sampledColor, float4(0.0f, 0.0f, 0.0f, 0.0f), float4(1.0f, 1.0f, 1.0f, 1.0f));
+	OutBuffer[DTid.x + DTid.y * InBuffer[0].ScreenWidth] = ConvertToRGBA(sampledColor);
 	// OutBuffer[DTid.x + DTid.y * InBuffer[0].ScreenWidth] = float4(InBuffer[0].Materials[2].GetEmission(), ((float)1.0 / (float)0.0);
 }

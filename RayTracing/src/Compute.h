@@ -39,7 +39,7 @@ class Compute
 public:
     Compute(Scene scene, float width, float height, uint32_t frameIndex, const Camera& camera);
     void InitBegiin();
-    void Init(Scene scene, uint32_t frameIndex);
+    void Init(Scene scene, uint32_t frameIndex, glm::vec4* accumulateData);
     void Update(uint32_t frameIndex);
     void Draw();
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
@@ -52,7 +52,8 @@ public:
 
     void createSyncObjects();
 
-    const OutPut* RenderResult;
+    uint32_t* RenderResult;
+    OutPut* AccumulationData;
     vk::Fence Fence;
     vk::Device device;
     vk::PhysicalDevice physicalDevice;
@@ -76,20 +77,24 @@ private:
     vk::DeviceMemory InBufferMemory;
     vk::DeviceMemory OutBufferMemory;
     vk::DeviceMemory CameraBufferMemory;
+    vk::DeviceMemory AccumulatedBufferMemory;
     uint32_t NumElements;
     uint32_t BufferSizeIn;
     uint32_t BufferSizeOut;
+    uint32_t AccumulatedColorBufferSize;
     uint32_t CameraDirectionsBufferSize;
     Scene m_Scene;
 
     vk::BufferCreateInfo BufferCreateInfoIn;
     vk::BufferCreateInfo BufferCreateInfoOut;
     vk::BufferCreateInfo BufferCreateInfoCameraDirections;
+    vk::BufferCreateInfo  AccumulatedCreateInfo;
 
     vk::Buffer InBuffer;
     vk::Buffer OutBuffer;
         //vk::Buffer UniformBuf
     vk::Buffer CameraBuffer;
+    vk::Buffer AccumulatedBuffer;
     vk::ShaderModule ShaderModule;
 
     FrameData* InBufferPtr;
