@@ -22,7 +22,7 @@ namespace Utils {
 		return (word >> 22u) ^ word;
 	}
 
-	static float RandomFloat(uint32_t& seed) 
+	static float RandomFloat(uint32_t& seed)
 	{
 		seed = PCG_Hash(seed);
 		return (float)seed / (float)std::numeric_limits<uint32_t>::max();
@@ -55,14 +55,6 @@ namespace Utils {
 
 void Renderer::Render(const Scene& scene, const Camera& camera) {
 
-	if (m_Compute == nullptr)
-	{
-		m_Compute = new Compute(scene);
-	}
-
-
-	//return;
-
 	m_Camera = &camera;
 	m_Scene = &scene;
 
@@ -71,11 +63,79 @@ void Renderer::Render(const Scene& scene, const Camera& camera) {
 		memset(m_AccumulationData, 0, m_FinalImage->GetWidth() * m_FinalImage->GetHeight() * sizeof(glm::vec4));
 	}
 
+#define GPU 1
+#if GPU
+	if (m_Compute == nullptr)
+	{
+		m_Compute = new Compute(scene, m_FinalImage->GetWidth(), m_FinalImage->GetHeight(), m_FrameIndex, camera);
+	}
+
+	m_Compute->Init(scene, m_FrameIndex);
+
+
+	//m_Compute->Update(m_FrameIndex);
+	//m_Compute->Draw();
+
+
+	while (vkGetFenceStatus(m_Compute->device, m_Compute->Fence) != VK_SUCCESS)
+	{
+
+	}
+
+
+
+
+	//for (uint32_t y = 0; y < m_FinalImage->GetHeight(); y++)
+	//{
+	//	for (uint32_t x = 0; x < m_FinalImage->GetWidth(); x++)
+	//	{
+	//		auto color = m_Compute->RenderResult[x + y * m_FinalImage->GetWidth()];
+	//		//m_AccumulationData[x + y * m_FinalImage->GetWidth()] += color;
+
+	//		//auto sampledColor = m_AccumulationData[x + y * m_FinalImage->GetWidth()] / (float)m_FrameIndex;
+	//		//sampledColor = glm::clamp(sampledColor, glm::vec4(0.0f), glm::vec4(1.0f));
+	//		//m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(sampledColor);
+
+	//		m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(color.direction);
+	//	}
+	//}
+
+	std::for_each(std::execution::par, m_VerticalIterator.begin(), m_VerticalIterator.end(),
+		[this](uint32_t y)
+		{
+			std::for_each(std::execution::par, m_HorizontalIterator.begin(), m_HorizontalIterator.end(),
+				[this, y](uint32_t x)
+				{
+					auto color = m_Compute->RenderResult[x + y * m_FinalImage->GetWidth()];
+					m_AccumulationData[x + y * m_FinalImage->GetWidth()] += color.direction;
+
+					auto sampledColor = m_AccumulationData[x + y * m_FinalImage->GetWidth()] / (float)m_FrameIndex;
+					sampledColor = glm::clamp(sampledColor, glm::vec4(0.0f), glm::vec4(1.0f));
+					m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(sampledColor);
+
+				});
+
+		});
+
+	m_FinalImage->SetData(m_ImageData);
+
+	if (m_Settings.Accumalate)
+	{
+		m_FrameIndex++;
+	}
+	else {
+		m_FrameIndex = 1;
+	}
+
+	return;
+
+#else
+
 #define MT 1
 #if MT
 
 	std::for_each(std::execution::par, m_VerticalIterator.begin(), m_VerticalIterator.end(),
-		[this](uint32_t y) 
+		[this](uint32_t y)
 		{
 			std::for_each(std::execution::par, m_HorizontalIterator.begin(), m_HorizontalIterator.end(),
 				[this, y](uint32_t x)
@@ -88,7 +148,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera) {
 					m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(sampledColor);
 
 				});
-		
+
 		});
 #else
 
@@ -104,6 +164,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera) {
 			m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(sampledColor);
 		}
 	}
+#endif
 #endif
 
 	m_FinalImage->SetData(m_ImageData);
@@ -132,9 +193,9 @@ glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 	seed *= m_FrameIndex;
 
 	int bounce = 5;
-	glm::vec3 light{0.0f};
+	glm::vec3 light{ 0.0f };
 
-	glm::vec3 contribution{1.0f};
+	glm::vec3 contribution{ 1.0f };
 	for (size_t i = 0; i < bounce; i++)
 	{
 		seed += i;
@@ -153,6 +214,8 @@ glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 
 		//light += mat.Albedo * contribution;
 		contribution *= mat.Albedo;
+
+
 		light += mat.GetEmission();
 
 		ray.Origin = payload.WorldPosition + payload.WorldNormal * 0.0001f;
@@ -197,7 +260,7 @@ Renderer::HitPayload Renderer::Miss(const Ray& ray)
 }
 
 
-Renderer::HitPayload Renderer::TraceRay( const Ray& ray)
+Renderer::HitPayload Renderer::TraceRay(const Ray& ray)
 {
 	glm::vec3 rayOrigin = ray.Origin;
 
@@ -207,7 +270,7 @@ Renderer::HitPayload Renderer::TraceRay( const Ray& ray)
 	glm::vec3 rayDirection = ray.Direction;
 	float a = glm::dot(rayDirection, rayDirection);
 
-	for (size_t i = 0 ; i < m_Scene->Spheres.size(); i++)
+	for (size_t i = 0; i < m_Scene->Spheres.size(); i++)
 	{
 		const Sphere& sphere = m_Scene->Spheres[i];
 		glm::vec3 origin = rayOrigin - sphere.Position;
