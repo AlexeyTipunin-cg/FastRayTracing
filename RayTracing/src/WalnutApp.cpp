@@ -146,7 +146,6 @@ public:
 		if (image)
 		{
 			ImGui::Image(image->GetDescriptorSet(), { (float)image->GetWidth(), (float)image->GetHeight() }, ImVec2(0, 1), ImVec2(1,0));
-			m_Camera.OnResize(m_ViewportWidth, m_ViewportHeight);
 		}
 
 		ImGui::End();
