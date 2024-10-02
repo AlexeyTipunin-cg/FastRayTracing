@@ -23,9 +23,10 @@ struct Material
 struct SceneData
 {
 	float ScreenWidth;
+	float ScreenHeight;
     float FrameIndex;
 	float3 CameraPosition;
-	SphereData Spheres[3];
+	SphereData Spheres[4];
 	Material Materials[3];
 };
 
@@ -104,7 +105,7 @@ HitPayload TraceRay(inout Ray ray)
     uint numStructs, stride;
     // InBuffer[0].Spheres.GetDimensions(numStructs, stride);
 
-	for (int i = 0 ; i < 3; i++)
+	for (int i = 0 ; i < 4; i++)
 	{
 		SphereData sphere = InBuffer[0].Spheres[i];
 		float3 origin = rayOrigin - sphere.Position;
@@ -167,7 +168,7 @@ float4 PerPixel(uint x, uint y)
 		if (payload.HitDistance < 0.0f)
 		{
 			float3 skyColor = float3(0.06, 0.7f, 0.9f);
-			//light += skyColor * contribution;
+			light += skyColor * contribution;
 			return float4(light, 1.0f);
 		}
 
@@ -192,13 +193,17 @@ uint ConvertToRGBA(float4 color) {
 	uint r = uint(255.0f * color.r);
 	uint g = uint(255.0f * color.g);
 	uint b = uint(255.0f * color.b);
-	uint a = uint(255 * color.a);
+	uint a = uint(255.0f * color.a);
 	return (a << 24) | (b << 16) | (g << 8) | r;
 }
 
-[numthreads(2, 1, 1)]
+[numthreads(32, 32, 1)]
 void Main(uint3 DTid : SV_DispatchThreadID)
 {
+
+	if (DTid.x >= InBuffer[0].ScreenWidth) return;
+	if (DTid.y >= InBuffer[0].ScreenHeight) return;
+	if ((DTid.x + DTid.y * InBuffer[0].ScreenWidth) >= (InBuffer[0].ScreenWidth * InBuffer[0].ScreenHeight)) return; 
     // OutBuffer[DTid.x + DTid.y * InBuffer[0].ScreenWidth] = PerPixel(DTid.x, DTid.y);
 	float4 color =  PerPixel(DTid.x, DTid.y);
 	AccumulatedColor[DTid.x + DTid.y * InBuffer[0].ScreenWidth] += color;

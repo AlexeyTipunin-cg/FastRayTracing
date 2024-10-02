@@ -3,6 +3,7 @@
 #include <optional>
 #include "Scene.h"
 #include "Camera.h"
+#include <execution>
 
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsAndComputeFamily;
@@ -26,10 +27,11 @@ struct OutPut
 struct FrameData
 {
     float ScreenWidth;
+    float ScreenHeight;
     float FrameIndex;
     CameraDirections CameraPosition;
-    Sphere Spheres[3];
-    Material Materials[3];
+    Sphere Spheres[4];
+    Material Materials[4];
 };
 
 class Compute
@@ -37,23 +39,12 @@ class Compute
 
 
 public:
-    Compute(Scene scene, float width, float height, uint32_t frameIndex, const Camera& camera);
-    void InitBegiin();
-    void Init(Scene scene, uint32_t frameIndex, glm::vec4* accumulateData);
-    void Update(uint32_t frameIndex);
-    void Draw();
-	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
-
-    void DrawFrame(float currentFrame);
-
-    void CreateComputePipeline();
-    void recordComputeCommandBuffer(VkCommandBuffer commandBuffer);
-    VkShaderModule createShaderModule(const std::vector<char>& code);
-
-    void createSyncObjects();
+    Compute(const Scene& scene, uint32_t width, uint32_t height, uint32_t frameIndex, const Camera& camera);
+    void Initialize();
+    void CalculateScreenPixels(uint32_t frameIndex, std::vector<uint32_t>* vertilcaIterator, std::vector<uint32_t>* horizontalIterator);
 
     uint32_t* RenderResult;
-    OutPut* AccumulationData;
+    OutPut* AccumulationData = nullptr;
     vk::Fence Fence;
     vk::Device device;
     vk::PhysicalDevice physicalDevice;
@@ -62,8 +53,8 @@ public:
 private:
     int MAX_FRAMES_IN_FLIGHT = 2;
 
-    float m_width;
-    float m_height;
+    uint32_t m_width;
+    uint32_t m_height;
     uint32_t m_frameIndex;
     const Camera* m_Camera;
 
@@ -83,7 +74,7 @@ private:
     uint32_t BufferSizeOut;
     uint32_t AccumulatedColorBufferSize;
     uint32_t CameraDirectionsBufferSize;
-    Scene m_Scene;
+    const Scene* m_Scene;
 
     vk::BufferCreateInfo BufferCreateInfoIn;
     vk::BufferCreateInfo BufferCreateInfoOut;
@@ -92,7 +83,7 @@ private:
 
     vk::Buffer InBuffer;
     vk::Buffer OutBuffer;
-        //vk::Buffer UniformBuf
+
     vk::Buffer CameraBuffer;
     vk::Buffer AccumulatedBuffer;
     vk::ShaderModule ShaderModule;
@@ -100,15 +91,16 @@ private:
     FrameData* InBufferPtr;
     CameraDirections* CameraBufferPtr;
 
-    VkDescriptorSetLayout computeDescriptorSetLayout;
+    vk::DescriptorSetAllocateInfo DescriptorSetAllocInfo;
+    vk::DescriptorBufferInfo InBufferInfo;
+    vk::DescriptorBufferInfo OutBufferInfo;
+    vk::DescriptorBufferInfo CameraBufferInfo;
+    vk::DescriptorBufferInfo AccumulatedBufferInfo;
+    vk::DescriptorPoolCreateInfo DescriptorPoolCreateInfo;
+
     VkPipelineLayout computePipelineLayout;
     VkPipeline computePipeline;
 
-    std::vector<VkSemaphore> imageAvailableSemaphores;
-    std::vector<VkSemaphore> renderFinishedSemaphores;
-    std::vector<VkSemaphore> computeFinishedSemaphores;
-    std::vector<VkFence> inFlightFences;
-    std::vector<VkFence> computeInFlightFences;
     vk::DescriptorSetLayout DescriptorSetLayout;
     vk::CommandBuffer CmdBuffer;
 };

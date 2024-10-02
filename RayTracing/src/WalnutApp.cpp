@@ -43,6 +43,15 @@ public:
 
 		{
 			Sphere sphere;
+			sphere.Position = { -3.0f, 0.0f, -1.0f };
+			sphere.Radius = 1.0f;
+			sphere.MaterialIndex = 0;
+
+			m_Scene.Spheres.push_back(sphere);
+		}
+
+		{
+			Sphere sphere;
 			sphere.Position = { 2.0f, 0.0f, 0.0f };
 			sphere.Radius = 1.0f;
 			sphere.MaterialIndex = 2;
@@ -63,6 +72,7 @@ public:
 	}
 
 	virtual void OnUpdate(float ts) override {
+
 		if (m_Camera.OnUpdate(ts))
 		{
 			m_Renderer.ResetFrameIndex();
@@ -136,6 +146,7 @@ public:
 		if (image)
 		{
 			ImGui::Image(image->GetDescriptorSet(), { (float)image->GetWidth(), (float)image->GetHeight() }, ImVec2(0, 1), ImVec2(1,0));
+			m_Camera.OnResize(m_ViewportWidth, m_ViewportHeight);
 		}
 
 		ImGui::End();

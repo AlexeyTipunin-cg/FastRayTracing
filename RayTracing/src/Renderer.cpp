@@ -70,61 +70,9 @@ void Renderer::Render(const Scene& scene, const Camera& camera) {
 		m_Compute = new Compute(scene, m_FinalImage->GetWidth(), m_FinalImage->GetHeight(), m_FrameIndex, camera);
 	}
 
-	m_Compute->Init(scene, m_FrameIndex, m_AccumulationData);
+	m_Compute->CalculateScreenPixels(m_FrameIndex, &m_VerticalIterator, &m_HorizontalIterator);
 
-
-	//m_Compute->Update(m_FrameIndex);
-	//m_Compute->Draw();
-
-
-	while (vkGetFenceStatus(m_Compute->device, m_Compute->Fence) != VK_SUCCESS)
-	{
-
-	}
-
-	//for (uint32_t y = 0; y < m_FinalImage->GetHeight(); y++)
-	//{
-	//	for (uint32_t x = 0; x < m_FinalImage->GetWidth(); x++)
-	//	{
-	//		auto color = m_Compute->RenderResult[x + y * m_FinalImage->GetWidth()];
-	//		//m_AccumulationData[x + y * m_FinalImage->GetWidth()] += color;
-
-	//		//auto sampledColor = m_AccumulationData[x + y * m_FinalImage->GetWidth()] / (float)m_FrameIndex;
-	//		//sampledColor = glm::clamp(sampledColor, glm::vec4(0.0f), glm::vec4(1.0f));
-	//		//m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(sampledColor);
-
-	//		m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(color.direction);
-	//	}
-	//}
-
-	std::for_each(std::execution::par, m_VerticalIterator.begin(), m_VerticalIterator.end(),
-		[this](uint32_t y)
-		{
-			std::for_each(std::execution::par, m_HorizontalIterator.begin(), m_HorizontalIterator.end(),
-				[this, y](uint32_t x)
-				{
-					m_ImageData[x + y * m_FinalImage->GetWidth()] = m_Compute->RenderResult[x + y * m_FinalImage->GetWidth()];
-					m_AccumulationData[x + y * m_FinalImage->GetWidth()] = m_Compute->AccumulationData[x + y * m_FinalImage->GetWidth()].direction;
-
-				});
-
-		});
-
-	//memcpy(m_ImageData, m_Compute->RenderResult, sizeof(uint32_t) * m_FinalImage->GetWidth() * m_FinalImage->GetHeight());
-	//memcpy(m_AccumulationData, m_Compute->AccumulationData, sizeof(OutPut) * m_FinalImage->GetWidth() * m_FinalImage->GetHeight());
-	//m_ImageData = m_Compute->RenderResult;
-	//memcpy(m_Compute->RenderResult, m_ImageData, sizeof(uint32_t) * m_FinalImage->GetWidth() * m_FinalImage->GetHeight());
-
-
-	//for (uint32_t y = 0; y < m_FinalImage->GetHeight(); y++)
-	//{
-	//	for (uint32_t x = 0; x < m_FinalImage->GetWidth(); x++)
-	//	{
-	//		m_ImageData[x + y * m_FinalImage->GetWidth()] = m_Compute->RenderResult[x + y * m_FinalImage->GetWidth()];
-	//		m_AccumulationData[x + y * m_FinalImage->GetWidth()] = m_Compute->AccumulationData[x + y * m_FinalImage->GetWidth()].direction;
-	//	}
-	//}
-	m_FinalImage->SetData(m_ImageData);
+	m_FinalImage->SetData(m_Compute->RenderResult);
 
 	if (m_Settings.Accumalate)
 	{
@@ -172,8 +120,6 @@ void Renderer::Render(const Scene& scene, const Camera& camera) {
 		}
 	}
 #endif
-#endif
-
 	m_FinalImage->SetData(m_ImageData);
 
 	if (m_Settings.Accumalate)
@@ -183,6 +129,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera) {
 	else {
 		m_FrameIndex = 1;
 	}
+#endif
 }
 
 void Renderer::SetLightPosition(glm::vec3 pos)
@@ -212,7 +159,7 @@ glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 		if (payload.HitDistance < 0.0f)
 		{
 			glm::vec3 skyColor = glm::vec3(0.06, 0.7f, 0.9f);
-			//light += skyColor * contribution;
+			light += skyColor * contribution;
 			return glm::vec4(light, 1.0f);
 		}
 

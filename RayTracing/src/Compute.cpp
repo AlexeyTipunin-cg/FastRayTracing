@@ -29,19 +29,18 @@ namespace Utils
 
 
 
-Compute::Compute(Scene scene, float width, float height, uint32_t frameIndex, const Camera& camera)
+Compute::Compute(const Scene& scene, uint32_t width, uint32_t height, uint32_t frameIndex, const Camera& camera)
 {
 	m_width = width;
 	m_height = height;
 	m_frameIndex = frameIndex;
 	m_Camera = &camera;
-	m_Scene = scene;
+	m_Scene = &scene;
 
-	//Init(scene);
-	InitBegiin();
+	Initialize();
 }
 
-void Compute::InitBegiin()
+void Compute::Initialize()
 {
 	device = Walnut::Application::GetDevice();
 	physicalDevice = Walnut::Application::GetPhysicalDevice();
@@ -198,125 +197,83 @@ void Compute::InitBegiin()
 		PipelineShaderCreateInfo,     // Shader Create Info struct
 		PipelineLayout);              // Pipeline Layout
 	ComputePipeline = device.createComputePipeline(PipelineCache, ComputePipelineCreateInfo).value;
+
+		device.bindBufferMemory(InBuffer, InBufferMemory, 0);
+	device.bindBufferMemory(OutBuffer, OutBufferMemory, 0);
+	device.bindBufferMemory(CameraBuffer, CameraBufferMemory, 0);
+	device.bindBufferMemory(AccumulatedBuffer, AccumulatedBufferMemory, 0);
+
+	InBufferInfo = vk::DescriptorBufferInfo(InBuffer, 0, 1 * sizeof(FrameData));
+	OutBufferInfo = vk::DescriptorBufferInfo(OutBuffer, 0, BufferSizeOut);
+	CameraBufferInfo = vk::DescriptorBufferInfo(CameraBuffer, 0, CameraDirectionsBufferSize);
+	AccumulatedBufferInfo = vk::DescriptorBufferInfo(AccumulatedBuffer, 0, AccumulatedColorBufferSize);
+
+	vk::DescriptorPoolSize DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 4);
+	DescriptorPoolCreateInfo = vk::DescriptorPoolCreateInfo (vk::DescriptorPoolCreateFlags(), 1, DescriptorPoolSize);
 }
 
-void Compute::Init(Scene scene, uint32_t frameIndex, glm::vec4* accumulateData)
+void Compute::CalculateScreenPixels(uint32_t frameIndex, std::vector<uint32_t>* vertilcaIterator, std::vector<uint32_t>* horizontalIterator)
 {
-
-	//const uint32_t FrameDataSize = sizeof(FrameData);
-	//const uint32_t MaterialBufferSize = scene.Materials.size() * sizeof(Material);
-
-	//vk::BufferCreateInfo BufferCreateInfoMaterials{
-	//vk::BufferCreateFlags(),
-	//MaterialBufferSize,
-	//vk::BufferUsageFlagBits::eStorageBuffer,
-	//vk::SharingMode::eExclusive,
-	//1,
-	//&ComputeQueueFamilyIndex
-	//};
-
-	//vk::DeviceMemory MaterialBufferMemory = device.allocateMemory(MaterialBufferAllocateInfo);
-
-
 	InBufferPtr = static_cast<FrameData*>(device.mapMemory(InBufferMemory, 0, BufferSizeIn));
 
 	auto pos = m_Camera->GetPosition();
 	CameraDirections cameraPosition{ pos };
 	FrameData data;
 	data.ScreenWidth = m_width;
+	data.ScreenHeight = m_height;
 	data.FrameIndex = frameIndex;
 	data.CameraPosition = cameraPosition;
 
-	for (size_t i = 0; i < 3; i++)
+	for (size_t i = 0; i < m_Scene->Spheres.size(); i++)
 	{
-		data.Spheres[i] = scene.Spheres[i];
+		data.Spheres[i] = m_Scene->Spheres[i];
 	}
 
-	for (size_t i = 0; i < 3; i++)
+	for (size_t i = 0; i < m_Scene->Materials.size(); i++)
 	{
-		data.Materials[i] = scene.Materials[i];
+		data.Materials[i] = m_Scene->Materials[i];
 	}
 
 	InBufferPtr[0] = data;
-	//for (int32_t I = 0; I < scene.Spheres.size(); ++I)
-	//{
-	//    CameraDirections cameraPosition{ m_Camera->GetPosition() };
-	//    FrameData data;
-	//    data.ScreenWidth = m_width;
-	//    data.FrameIndex = m_frameIndex;
-	//    data.CameraPosition = cameraPosition;
-	//    data.Spheres = scene.Spheres;
-	//    data.Materials = scene.Materials
-
-	//    SphereComputeData data{ glm::vec4(scene.Spheres[I].Position, 0.0f),scene.Spheres[I].Radius, scene.Spheres[I].MaterialIndex };
-	//    InBufferPtr[I] = data;
-	//}
 
 	device.unmapMemory(InBufferMemory);
 
-	//FrameData* UniformBufferPtr = static_cast<FrameData*>(device.mapMemory(UniformBufferMemory, 0, FrameDataSize));
-	//UniformBufferPtr->FrameIndex = m_frameIndex;
-	//UniformBufferPtr->ScreenWidth = m_width;
 
-	//device.unmapMemory(UniformBufferMemory);
 
-	CameraBufferPtr = static_cast<CameraDirections*>(device.mapMemory(CameraBufferMemory, 0, CameraDirectionsBufferSize));
-	AccumulationData = static_cast<OutPut*>(device.mapMemory(AccumulatedBufferMemory, 0, AccumulatedColorBufferSize));
-	for (int32_t I = 0; I < m_Camera->GetRayDirections().size(); ++I)
+	if (frameIndex < 3)
 	{
-		CameraDirections dir{ m_Camera->GetRayDirections()[I] };
-		CameraBufferPtr[I] = dir;
+		CameraBufferPtr = static_cast<CameraDirections*>(device.mapMemory(CameraBufferMemory, 0, CameraDirectionsBufferSize));
 
-		AccumulationData[I] = OutPut{ accumulateData[I] };
+		for (int32_t I = 0; I < m_Camera->GetRayDirections().size(); ++I)
+		{
+			CameraDirections dir{ m_Camera->GetRayDirections()[I] };
+			CameraBufferPtr[I] = dir;
+		}
+
+		device.unmapMemory(CameraBufferMemory);
+
 	}
 
-	device.unmapMemory(CameraBufferMemory);
+	if (frameIndex == 1)
+	{
+		AccumulationData = static_cast<OutPut*>(device.mapMemory(AccumulatedBufferMemory, 0, AccumulatedColorBufferSize));
+		memset(AccumulationData, 0, AccumulatedColorBufferSize);
+		device.unmapMemory(AccumulatedBufferMemory);
+	}
 
-	//Material* MaterialBufferPtr = static_cast<Material*>(device.mapMemory(MaterialBufferMemory, 0, MaterialBufferSize));
-	//for (int32_t I = 0; I < scene.Materials.size(); ++I)
-	//{
-	//    MaterialBufferPtr[I] = scene.Materials[I];
-	//}
-
-	//device.unmapMemory(MaterialBufferMemory);
-
-
-
-	device.bindBufferMemory(InBuffer, InBufferMemory, 0);
-	device.bindBufferMemory(OutBuffer, OutBufferMemory, 0);
-	//device.bindBufferMemory(UniformBuffer, UniformBufferMemory, 0);
-	device.bindBufferMemory(CameraBuffer, CameraBufferMemory, 0);
-	device.bindBufferMemory(AccumulatedBuffer, AccumulatedBufferMemory, 0);
-	//device.bindBufferMemory(MaterialBuffer, MaterialBufferMemory, 0);
-
-
-	vk::DescriptorPoolSize DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 4);
-	vk::DescriptorPoolCreateInfo DescriptorPoolCreateInfo(vk::DescriptorPoolCreateFlags(), 1, DescriptorPoolSize);
 	vk::DescriptorPool DescriptorPool = device.createDescriptorPool(DescriptorPoolCreateInfo);
-
-
 
 	vk::DescriptorSetAllocateInfo DescriptorSetAllocInfo(DescriptorPool, 1, &DescriptorSetLayout);
 	const std::vector<vk::DescriptorSet> DescriptorSets = device.allocateDescriptorSets(DescriptorSetAllocInfo);
 	DescriptorSet = DescriptorSets.front();
-	vk::DescriptorBufferInfo InBufferInfo(InBuffer, 0, 1 * sizeof(FrameData));
-	vk::DescriptorBufferInfo OutBufferInfo(OutBuffer, 0, BufferSizeOut);
-	//vk::DescriptorBufferInfo UniformBufferInfo(UniformBuffer, 0, FrameDataSize);
-	vk::DescriptorBufferInfo CameraBufferInfo(CameraBuffer, 0, CameraDirectionsBufferSize);
-	vk::DescriptorBufferInfo AccumulatedBufferInfo(AccumulatedBuffer, 0, AccumulatedColorBufferSize);
-	//vk::DescriptorBufferInfo MaterialBufferInfo(MaterialBuffer, 0, MaterialBufferSize);
 
 	WriteDescriptorSet = {
 		{DescriptorSet, 0, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &InBufferInfo},
 		{DescriptorSet, 1, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &OutBufferInfo},
-		//{DescriptorSet, 2, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &UniformBufferInfo},
 		{DescriptorSet, 2, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &CameraBufferInfo},
 		{DescriptorSet, 3, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &AccumulatedBufferInfo},
-		//{DescriptorSet, 4, 0, 1, vk::DescriptorType::eStorageBuffer, nullptr, &MaterialBufferInfo},
 	};
 	device.updateDescriptorSets(WriteDescriptorSet, {});
-
-
 
 	if (!CmdBuffer)
 	{
@@ -341,7 +298,7 @@ void Compute::Init(Scene scene, uint32_t frameIndex, glm::vec4* accumulateData)
 		0,                               // First descriptor set
 		{ DescriptorSet },               // List of descriptor sets
 		{});                             // Dynamic offsets
-	CmdBuffer.dispatch(m_width, m_height, 1);
+	CmdBuffer.dispatch(m_width / 32, m_height/ 32, 1);
 	CmdBuffer.end();
 
 	vk::Queue Queue = device.getQueue(ComputeQueueFamilyIndex, 0);
@@ -357,136 +314,10 @@ void Compute::Init(Scene scene, uint32_t frameIndex, glm::vec4* accumulateData)
 		true,               // Wait All
 		uint64_t(-1));
 
-	// Timeout
-
-	InBufferPtr = static_cast<FrameData*>(device.mapMemory(InBufferMemory, 0, BufferSizeIn));
-	//for (uint32_t I = 0; I < scene.Materials.size(); ++I)
-	//{
-	//	std::cout << InBufferPtr[0].FrameIndex << " ";
-	//}
-	std::cout << std::endl;
-	device.unmapMemory(InBufferMemory);
-
 	uint32_t* OutBufferPtr = static_cast<uint32_t*>(device.mapMemory(OutBufferMemory, 0, BufferSizeOut));
 	RenderResult = OutBufferPtr;
+	device.unmapMemory(OutBufferMemory);
 	AccumulationData = static_cast<OutPut*>(device.mapMemory(AccumulatedBufferMemory, 0, AccumulatedColorBufferSize));
-	//for (uint32_t I = 0; I < NumElements; ++I)
-	//{
-	//	std::cout << glm::to_string(OutBufferPtr[I].direction) << "\n";
-	//	break;
-	//}
-	std::cout << std::endl;
-	device.unmapMemory(OutBufferMemory);
+	device.unmapMemory(AccumulatedBufferMemory);
 }
 
-void Compute::Update(uint32_t frameIndex)
-{
-	InBufferPtr = static_cast<FrameData*>(device.mapMemory(InBufferMemory, 0, BufferSizeIn));
-
-	auto pos = m_Camera->GetPosition();
-	CameraDirections cameraPosition{ pos };
-	FrameData data;
-	data.ScreenWidth = m_width;
-	data.FrameIndex = frameIndex;
-	data.CameraPosition = cameraPosition;
-
-	for (size_t i = 0; i < 3; i++)
-	{
-		data.Spheres[i] = m_Scene.Spheres[i];
-	}
-
-	for (size_t i = 0; i < 3; i++)
-	{
-		data.Materials[i] = m_Scene.Materials[i];
-	}
-
-	InBufferPtr[0] = data;
-	//for (int32_t I = 0; I < scene.Spheres.size(); ++I)
-	//{
-	//    CameraDirections cameraPosition{ m_Camera->GetPosition() };
-	//    FrameData data;
-	//    data.ScreenWidth = m_width;
-	//    data.FrameIndex = m_frameIndex;
-	//    data.CameraPosition = cameraPosition;
-	//    data.Spheres = scene.Spheres;
-	//    data.Materials = scene.Materials
-
-	//    SphereComputeData data{ glm::vec4(scene.Spheres[I].Position, 0.0f),scene.Spheres[I].Radius, scene.Spheres[I].MaterialIndex };
-	//    InBufferPtr[I] = data;
-	//}
-
-	device.unmapMemory(InBufferMemory);
-
-	//FrameData* UniformBufferPtr = static_cast<FrameData*>(device.mapMemory(UniformBufferMemory, 0, FrameDataSize));
-	//UniformBufferPtr->FrameIndex = m_frameIndex;
-	//UniformBufferPtr->ScreenWidth = m_width;
-
-	//device.unmapMemory(UniformBufferMemory);
-
-	CameraBufferPtr = static_cast<CameraDirections*>(device.mapMemory(CameraBufferMemory, 0, CameraDirectionsBufferSize));
-	for (int32_t I = 0; I < m_Camera->GetRayDirections().size(); ++I)
-	{
-		CameraDirections dir{ m_Camera->GetRayDirections()[I] };
-		CameraBufferPtr[I] = dir;
-	}
-
-	device.unmapMemory(CameraBufferMemory);
-}
-
-void Compute::Draw()
-{
-	device.updateDescriptorSets(WriteDescriptorSet, {});
-
-	vk::CommandPoolCreateInfo CommandPoolCreateInfo(vk::CommandPoolCreateFlags(), ComputeQueueFamilyIndex);
-	vk::CommandPool CommandPool = device.createCommandPool(CommandPoolCreateInfo);
-
-	vk::CommandBufferAllocateInfo CommandBufferAllocInfo(
-		CommandPool,                         // Command Pool
-		vk::CommandBufferLevel::ePrimary,    // Level
-		1);                                  // Num Command Buffers
-	const std::vector<vk::CommandBuffer> CmdBuffers = device.allocateCommandBuffers(CommandBufferAllocInfo);
-	vk::CommandBuffer CmdBuffer = CmdBuffers.front();
-
-
-	vk::CommandBufferBeginInfo CmdBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-	CmdBuffer.begin(CmdBufferBeginInfo);
-	CmdBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, ComputePipeline);
-	CmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute,    // Bind point
-		PipelineLayout,                  // Pipeline Layout
-		0,                               // First descriptor set
-		{ DescriptorSet },               // List of descriptor sets
-		{});                             // Dynamic offsets
-	CmdBuffer.dispatch(m_width, m_height, 1);
-	CmdBuffer.end();
-
-	vk::Queue Queue = device.getQueue(ComputeQueueFamilyIndex, 0);
-	Fence = device.createFence(vk::FenceCreateInfo());
-
-	vk::SubmitInfo SubmitInfo(0,                // Num Wait Semaphores
-		nullptr,        // Wait Semaphores
-		nullptr,        // Pipeline Stage Flags
-		1,              // Num Command Buffers
-		&CmdBuffer);    // List of command buffers
-	Queue.submit({ SubmitInfo }, Fence);
-	device.waitForFences({ Fence },             // List of fences
-		true,               // Wait All
-		uint64_t(-1));      // Timeout
-
-	InBufferPtr = static_cast<FrameData*>(device.mapMemory(InBufferMemory, 0, BufferSizeIn));
-	for (uint32_t I = 0; I < 3; ++I)
-	{
-		std::cout << InBufferPtr[0].FrameIndex << " ";
-	}
-	std::cout << std::endl;
-	device.unmapMemory(InBufferMemory);
-
-	uint32_t* OutBufferPtr = static_cast<uint32_t*>(device.mapMemory(OutBufferMemory, 0, BufferSizeOut));
-	RenderResult = OutBufferPtr;
-	for (uint32_t I = 0; I < NumElements; ++I)
-	{
-		std::cout << OutBufferPtr[I] << "\n";
-		break;
-	}
-	std::cout << std::endl;
-	device.unmapMemory(OutBufferMemory);
-}
